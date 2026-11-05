@@ -287,7 +287,7 @@
     toast: $('toast'),
   };
 
-  const state = { me: null, peers: [], selected: null, limits: {}, received: 0 };
+  const state = { me: null, peers: [], selected: null, limits: {}, pendingText: null };
   let ws = null;
   let attempts = 0;
 
@@ -492,7 +492,9 @@
     if (!text.trim()) return toast('Nothing to send.');
     if (!ws || ws.readyState !== WebSocket.OPEN) return toast('Not connected.');
     ws.send(JSON.stringify({ type: 'text', to: state.selected, text }));
-    els.text.value = '';
+    // Keep the text in the box until the server acks it — a rejection must not
+    // destroy what the user pasted.
+    state.pendingText = text;
   }
 
   function sendFiles(fileList) {
@@ -535,7 +537,7 @@
     xhr.open('POST', `/upload?${params}`);
 
     xhr.upload.addEventListener('progress', (event) => {
-      if (!event.lengthComputable) return;
+      if (!event.lengthComputable || !event.total) return;
       const pct = Math.round((event.loaded / event.total) * 100);
       status.textContent = `${pct}%`;
       fill.style.width = `${pct}%`;
@@ -595,9 +597,15 @@
           if (message.item.kind === 'text') renderText(message.item);
           else renderFile(message.item);
           break;
-        case 'sent':
-          toast(`Sent to ${selectedPeer()?.name || 'device'}.`);
+        case 'sent': {
+          const to = state.peers.find((p) => p.id === message.to);
+          toast(`Sent to ${to?.name || 'device'}.`);
+          if (message.kind === 'text' && els.text.value === state.pendingText) {
+            els.text.value = '';
+          }
+          state.pendingText = null;
           break;
+        }
         case 'error':
           toast(message.message);
           break;

@@ -67,7 +67,9 @@ function cleanName(value) {
 }
 
 function send(ws, message) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+  if (ws.readyState !== ws.OPEN) return false;
+  ws.send(JSON.stringify(message));
+  return true;
 }
 
 /** Peers other than `exceptId`, in the shape the client renders. */
@@ -84,7 +86,7 @@ function broadcastPeers() {
 }
 
 function deliver(peer, item) {
-  send(peer.ws, { type: 'inbox', item });
+  return send(peer.ws, { type: 'inbox', item });
 }
 
 // ---------------------------------------------------------------- http
@@ -110,23 +112,39 @@ function endJson(res, status, payload) {
   res.end(body);
 }
 
+/** Pipe a readable file into the response, releasing the fd however it ends. */
+function streamFile(filePath, res, headers) {
+  const stream = fs.createReadStream(filePath);
+  // Without this, a client that aborts mid-download leaks the fd for the life
+  // of the process — which also keeps the inode alive after the janitor unlinks it.
+  res.on('close', () => stream.destroy());
+  stream.on('error', () => {
+    if (res.headersSent) return res.destroy();
+    endWith(res, 404, 'Not found');
+  });
+  stream.once('open', () => {
+    res.writeHead(200, headers);
+    stream.pipe(res);
+  });
+}
+
 function serveStatic(urlPath, res) {
   const relative = urlPath === '/' ? '/index.html' : urlPath;
   const filePath = path.resolve(PUBLIC_DIR, `.${relative}`);
 
   // Never serve anything that resolves outside public/.
-  if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) {
+  if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
     return endWith(res, 404, 'Not found');
   }
 
-  const stream = fs.createReadStream(filePath);
-  stream.on('error', () => endWith(res, 404, 'Not found'));
-  stream.once('open', () => {
-    res.writeHead(200, {
+  // Resolve first: a directory would open fine and then fail mid-response.
+  fs.stat(filePath, (err, stat) => {
+    if (err || !stat.isFile()) return endWith(res, 404, 'Not found');
+    streamFile(filePath, res, {
       'Content-Type': CONTENT_TYPES[path.extname(filePath)] || 'application/octet-stream',
+      'Content-Length': stat.size,
       'Cache-Control': 'no-cache',
     });
-    stream.pipe(res);
   });
 }
 
@@ -232,7 +250,7 @@ function handleUpload(req, res, query) {
     const entry = { id, name, size: received, mime, toId: target.id, expiresAt: Date.now() + FILE_TTL_MS };
     files.set(id, entry);
 
-    deliver(stillThere, {
+    const delivered = deliver(stillThere, {
       kind: 'file',
       id,
       at: Date.now(),
@@ -243,6 +261,13 @@ function handleUpload(req, res, query) {
       url: `/download/${id}`,
       expiresAt: entry.expiresAt,
     });
+
+    // Don't claim success — and don't park the file on disk for a full TTL —
+    // if the recipient's socket was already closing.
+    if (!delivered) {
+      discard(id);
+      return endJson(res, 410, { error: 'That device left before the upload finished.' });
+    }
 
     endJson(res, 200, { id, size: received });
   });
@@ -271,15 +296,7 @@ function handleDownload(req, res, rawId) {
     return res.end();
   }
 
-  const stream = fs.createReadStream(path.join(DATA_DIR, entry.id));
-  stream.on('error', () => {
-    if (!res.headersSent) endWith(res, 404, 'This file has expired or does not exist.');
-    else res.destroy();
-  });
-  stream.once('open', () => {
-    res.writeHead(200, headers);
-    stream.pipe(res);
-  });
+  streamFile(path.join(DATA_DIR, entry.id), res, headers);
 }
 
 const janitor = setInterval(() => {
@@ -292,7 +309,24 @@ janitor.unref();
 
 // ---------------------------------------------------------------- websocket hub
 
-const wss = new WebSocketServer({ noServer: true });
+// The largest legal message is a MAX_TEXT_CHARS text frame; the 100MB default
+// would let one client force a huge allocation before any length check runs.
+const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+
+/**
+ * WebSockets are exempt from the same-origin policy, so without this any web
+ * page a user visits could open a socket to this relay and read the device
+ * list. Non-browser clients send no Origin and are left alone.
+ */
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
 
 server.on('upgrade', (req, socket, head) => {
   let pathname;
@@ -302,6 +336,10 @@ server.on('upgrade', (req, socket, head) => {
     return socket.destroy();
   }
   if (pathname !== '/ws') return socket.destroy();
+  if (!sameOrigin(req)) {
+    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    return socket.destroy();
+  }
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
@@ -346,13 +384,16 @@ wss.on('connection', (ws) => {
       if (text.length > MAX_TEXT_CHARS) {
         return send(ws, { type: 'error', message: `Text is too long (max ${MAX_TEXT_CHARS} characters).` });
       }
-      deliver(target, {
+      const delivered = deliver(target, {
         kind: 'text',
         id: crypto.randomUUID(),
         at: Date.now(),
         from: { id: peer.id, name: peer.name },
         text,
       });
+      if (!delivered) {
+        return send(ws, { type: 'error', message: 'That device is no longer connected.' });
+      }
       return send(ws, { type: 'sent', to: target.id, kind: 'text' });
     }
 
