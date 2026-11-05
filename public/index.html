@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>toss it</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #e1e4e8;
+    --text: #1c1f23;
+    --muted: #6b7280;
+    --accent: #3b6ef5;
+    --accent-text: #ffffff;
+    --ok: #16a34a;
+    --bad: #dc2626;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a;
+      --panel: #1d2024;
+      --border: #2d3238;
+      --text: #e8eaed;
+      --muted: #9aa3ad;
+      --accent: #5b87ff;
+      --accent-text: #0d1117;
+      --ok: #4ade80;
+      --bad: #f87171;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding-block: 20px 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 20px;
+    letter-spacing: -0.02em;
+  }
+  h1 span { color: var(--accent); }
+  h2 {
+    margin: 0 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  .me { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  #name {
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px 6px;
+    width: 15ch;
+    max-width: 40vw;
+  }
+  #name:hover { border-color: var(--border); }
+  #name:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+
+  .status { display: flex; align-items: center; gap: 7px; margin-left: auto; font-size: 13px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .status[data-state="online"] .dot { background: var(--ok); }
+  .status[data-state="offline"] .dot { background: var(--bad); }
+
+  main {
+    max-width: 1000px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 760px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .col-left { grid-column: 1; }
+  .inbox { grid-column: 2; grid-row: 1 / span 2; }
+  @media (max-width: 760px) {
+    .col-left, .inbox { grid-column: 1; grid-row: auto; }
+  }
+
+  ul { list-style: none; margin: 0; padding: 0; }
+  .empty { margin: 0; color: var(--muted); font-size: 13px; }
+
+  #peer-list { display: flex; flex-direction: column; gap: 8px; }
+  .peer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    font: inherit;
+    text-align: left;
+    color: inherit;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+    cursor: pointer;
+  }
+  .peer:hover { border-color: var(--accent); }
+  .peer[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .peer .avatar {
+    width: 28px; height: 28px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
+    font-size: 12px; font-weight: 700;
+  }
+  .peer .check { margin-left: auto; color: var(--accent); font-size: 13px; }
+
+  textarea {
+    width: 100%;
+    min-height: 96px;
+    resize: vertical;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px 12px;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  button, .button {
+    font: inherit;
+    font-weight: 500;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 8px 14px;
+    cursor: pointer;
+    background: var(--accent);
+    color: var(--accent-text);
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .secondary { background: transparent; color: var(--text); border-color: var(--border); }
+  .secondary:hover { border-color: var(--accent); }
+  .mini { padding: 4px 10px; font-size: 13px; }
+
+  .hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+
+  #uploads { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  #uploads li { font-size: 13px; }
+  .up-head { display: flex; gap: 8px; align-items: baseline; }
+  .up-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .up-state { margin-left: auto; color: var(--muted); flex: none; }
+  .up-state.bad { color: var(--bad); }
+  .up-state.ok { color: var(--ok); }
+  .bar { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 5px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+
+  #inbox { display: flex; flex-direction: column; gap: 10px; }
+  .item { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .item-head { display: flex; gap: 8px; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .item-from { font-weight: 600; color: var(--text); }
+  .item-time { margin-left: auto; flex: none; }
+  .item pre {
+    margin: 0 0 10px;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: 8px;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 260px;
+    overflow: auto;
+  }
+  .file-line { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; overflow-wrap: anywhere; }
+  .file-name { font-weight: 500; }
+  .file-size { color: var(--muted); font-size: 13px; flex: none; }
+  .gone { color: var(--bad); font-size: 13px; }
+
+  #drop {
+    position: fixed;
+    inset: 0;
+    display: none;
+    place-items: center;
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    backdrop-filter: blur(2px);
+    font-size: 20px;
+    font-weight: 600;
+    z-index: 20;
+    pointer-events: none;
+  }
+  body.dragging #drop { display: grid; }
+
+  #toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%) translateY(12px);
+    background: var(--text);
+    color: var(--bg);
+    padding: 9px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity .18s, transform .18s;
+    pointer-events: none;
+    z-index: 30;
+    max-width: 90vw;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>toss<span>·</span>it</h1>
+  <div class="me">You are <input id="name" maxlength="32" spellcheck="false" aria-label="Your device name"></div>
+  <div class="status" id="status" data-state="connecting">
+    <span class="dot"></span><span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<main>
+  <section class="panel col-left">
+    <h2>Devices</h2>
+    <ul id="peer-list"></ul>
+    <p class="empty" id="peer-empty">No other devices yet. Open this page on another device on your network.</p>
+  </section>
+
+  <section class="panel col-left">
+    <h2>Send</h2>
+    <textarea id="text" placeholder="Paste or type text to toss…"></textarea>
+    <div class="row">
+      <button id="send-text">Send text</button>
+      <label class="button secondary" for="file">Choose files…</label>
+      <input type="file" id="file" multiple hidden>
+    </div>
+    <p class="hint">Pick a device, then send text or drop files anywhere on this page.</p>
+    <ul id="uploads"></ul>
+  </section>
+
+  <section class="panel inbox">
+    <h2>Inbox</h2>
+    <ul id="inbox"></ul>
+    <p class="empty" id="inbox-empty">Nothing received yet.</p>
+  </section>
+</main>
+
+<div id="drop">Drop to send</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    name: $('name'), status: $('status'), statusText: $('status-text'),
+    peerList: $('peer-list'), peerEmpty: $('peer-empty'),
+    text: $('text'), sendText: $('send-text'), file: $('file'),
+    uploads: $('uploads'), inbox: $('inbox'), inboxEmpty: $('inbox-empty'),
+    toast: $('toast'),
+  };
+
+  const state = { me: null, peers: [], selected: null, limits: {}, received: 0 };
+  let ws = null;
+  let attempts = 0;
+
+  // ------------------------------------------------------------- helpers
+
+  let toastTimer;
+  function toast(message) {
+    els.toast.textContent = message;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2600);
+  }
+
+  function formatSize(bytes) {
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let value = bytes, unit = 0;
+    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+    return `${unit === 0 ? value : value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
+  }
+
+  const formatTime = (ms) =>
+    new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const initials = (name) => name.split(' ').map((w) => w[0] || '').join('').slice(0, 2).toUpperCase();
+
+  function setStatus(stateName, label) {
+    els.status.dataset.state = stateName;
+    els.statusText.textContent = label;
+  }
+
+  function selectedPeer() {
+    return state.peers.find((p) => p.id === state.selected) || null;
+  }
+
+  function requireTarget() {
+    if (selectedPeer()) return true;
+    toast('Pick a device first.');
+    return false;
+  }
+
+  // ------------------------------------------------------------- rendering
+
+  function renderPeers() {
+    els.peerList.replaceChildren();
+    // Drop a selection whose device has gone away.
+    if (state.selected && !selectedPeer()) state.selected = null;
+
+    for (const peer of state.peers) {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.className = 'peer';
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(peer.id === state.selected));
+
+      const avatar = document.createElement('span');
+      avatar.className = 'avatar';
+      avatar.textContent = initials(peer.name);
+
+      const label = document.createElement('span');
+      label.textContent = peer.name;
+
+      button.append(avatar, label);
+      if (peer.id === state.selected) {
+        const check = document.createElement('span');
+        check.className = 'check';
+        check.textContent = 'selected';
+        button.append(check);
+      }
+
+      button.addEventListener('click', () => {
+        state.selected = state.selected === peer.id ? null : peer.id;
+        renderPeers();
+      });
+
+      li.append(button);
+      els.peerList.append(li);
+    }
+    els.peerEmpty.hidden = state.peers.length > 0;
+  }
+
+  function addItem(node) {
+    els.inbox.prepend(node);
+    els.inboxEmpty.hidden = true;
+  }
+
+  function itemHeader(item) {
+    const head = document.createElement('div');
+    head.className = 'item-head';
+    const from = document.createElement('span');
+    from.className = 'item-from';
+    from.textContent = item.from.name;
+    const kind = document.createElement('span');
+    kind.textContent = item.kind === 'text' ? 'sent text' : 'sent a file';
+    const time = document.createElement('span');
+    time.className = 'item-time';
+    time.textContent = formatTime(item.at);
+    head.append(from, kind, time);
+    return head;
+  }
+
+  function renderText(item) {
+    const li = document.createElement('li');
+    li.className = 'item';
+
+    const pre = document.createElement('pre');
+    pre.textContent = item.text;
+
+    const copy = document.createElement('button');
+    copy.className = 'mini';
+    copy.type = 'button';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', () => copyText(item.text, copy));
+
+    li.append(itemHeader(item), pre, copy);
+    addItem(li);
+  }
+
+  function renderFile(item) {
+    const li = document.createElement('li');
+    li.className = 'item';
+
+    const line = document.createElement('div');
+    line.className = 'file-line';
+    const name = document.createElement('span');
+    name.className = 'file-name';
+    name.textContent = item.name;
+    const size = document.createElement('span');
+    size.className = 'file-size';
+    size.textContent = formatSize(item.size);
+    line.append(name, size);
+
+    const link = document.createElement('a');
+    link.className = 'button mini';
+    link.href = item.url;
+    link.download = item.name;
+    link.textContent = 'Download';
+    link.addEventListener('click', async (event) => {
+      event.preventDefault();
+      let alive = false;
+      try {
+        const response = await fetch(item.url, { method: 'HEAD' });
+        alive = response.ok;
+      } catch { alive = false; }
+
+      if (!alive) {
+        link.remove();
+        const gone = document.createElement('span');
+        gone.className = 'gone';
+        gone.textContent = 'This file has expired and is no longer available.';
+        li.append(gone);
+        toast('This file has expired.');
+        return;
+      }
+      // Re-trigger as a plain navigation so the browser handles the download.
+      const temp = document.createElement('a');
+      temp.href = item.url;
+      temp.download = item.name;
+      document.body.append(temp);
+      temp.click();
+      temp.remove();
+    });
+
+    li.append(itemHeader(item), line, link);
+    addItem(li);
+  }
+
+  // ------------------------------------------------------------- clipboard
+
+  async function copyText(text, button) {
+    const flash = (ok) => {
+      button.textContent = ok ? 'Copied' : 'Press Ctrl/Cmd+C';
+      setTimeout(() => { button.textContent = 'Copy'; }, 1600);
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return flash(true);
+      } catch { /* fall through to the legacy path */ }
+    }
+
+    // Plain-HTTP (insecure context) fallback.
+    const scratch = document.createElement('textarea');
+    scratch.value = text;
+    scratch.setAttribute('aria-hidden', 'true');
+    scratch.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;';
+    document.body.append(scratch);
+    scratch.focus();
+    scratch.select();
+    scratch.setSelectionRange(0, text.length);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    scratch.remove();
+    flash(ok);
+  }
+
+  // ------------------------------------------------------------- sending
+
+  function sendText() {
+    if (!requireTarget()) return;
+    const text = els.text.value;
+    if (!text.trim()) return toast('Nothing to send.');
+    if (!ws || ws.readyState !== WebSocket.OPEN) return toast('Not connected.');
+    ws.send(JSON.stringify({ type: 'text', to: state.selected, text }));
+    els.text.value = '';
+  }
+
+  function sendFiles(fileList) {
+    if (!requireTarget()) return;
+    for (const file of fileList) uploadFile(file, state.selected);
+  }
+
+  function uploadFile(file, targetId) {
+    const li = document.createElement('li');
+    const head = document.createElement('div');
+    head.className = 'up-head';
+    const name = document.createElement('span');
+    name.className = 'up-name';
+    name.textContent = file.name;
+    const status = document.createElement('span');
+    status.className = 'up-state';
+    status.textContent = '0%';
+    head.append(name, status);
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    const fill = document.createElement('i');
+    bar.append(fill);
+    li.append(head, bar);
+    els.uploads.prepend(li);
+
+    const settle = (text, kind) => {
+      status.textContent = text;
+      status.className = `up-state ${kind}`;
+      bar.remove();
+      if (kind === 'ok') setTimeout(() => li.remove(), 4000);
+    };
+
+    const limit = state.limits.maxFileBytes;
+    if (limit && file.size > limit) {
+      return settle(`Too large (max ${formatSize(limit)})`, 'bad');
+    }
+
+    const params = new URLSearchParams({ to: targetId, from: state.me?.id || '', name: file.name });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `/upload?${params}`);
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable) return;
+      const pct = Math.round((event.loaded / event.total) * 100);
+      status.textContent = `${pct}%`;
+      fill.style.width = `${pct}%`;
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) return settle('Sent', 'ok');
+      let message = `Failed (${xhr.status})`;
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (body && body.error) message = body.error;
+      } catch { /* keep the status-code message */ }
+      settle(message, 'bad');
+      toast(message);
+    });
+
+    xhr.addEventListener('error', () => settle('Upload failed', 'bad'));
+    xhr.addEventListener('abort', () => settle('Cancelled', 'bad'));
+    xhr.send(file);
+  }
+
+  // ------------------------------------------------------------- connection
+
+  function connect() {
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${scheme}://${location.host}/ws`);
+
+    ws.addEventListener('open', () => {
+      attempts = 0;
+      setStatus('online', 'Connected');
+      const saved = localStorage.getItem('tossit.name');
+      if (saved) ws.send(JSON.stringify({ type: 'rename', name: saved }));
+    });
+
+    ws.addEventListener('message', (event) => {
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+
+      switch (message.type) {
+        case 'welcome':
+          state.me = message.you;
+          state.limits = message.limits || {};
+          state.peers = message.peers || [];
+          if (document.activeElement !== els.name) els.name.value = state.me.name;
+          renderPeers();
+          break;
+        case 'peers':
+          state.peers = message.peers || [];
+          renderPeers();
+          break;
+        case 'renamed':
+          if (state.me) state.me.name = message.name;
+          localStorage.setItem('tossit.name', message.name);
+          if (document.activeElement !== els.name) els.name.value = message.name;
+          break;
+        case 'inbox':
+          if (message.item.kind === 'text') renderText(message.item);
+          else renderFile(message.item);
+          break;
+        case 'sent':
+          toast(`Sent to ${selectedPeer()?.name || 'device'}.`);
+          break;
+        case 'error':
+          toast(message.message);
+          break;
+      }
+    });
+
+    ws.addEventListener('close', () => {
+      state.peers = [];
+      renderPeers();
+      const delay = Math.min(5000, 500 * 2 ** attempts++);
+      setStatus('offline', 'Disconnected — reconnecting…');
+      setTimeout(connect, delay);
+    });
+
+    ws.addEventListener('error', () => ws.close());
+  }
+
+  // ------------------------------------------------------------- events
+
+  els.sendText.addEventListener('click', sendText);
+
+  els.text.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      sendText();
+    }
+  });
+
+  els.file.addEventListener('change', () => {
+    if (els.file.files.length) sendFiles(els.file.files);
+    els.file.value = '';
+  });
+
+  function commitName() {
+    const name = els.name.value.trim().slice(0, 32);
+    if (!name) {
+      els.name.value = state.me?.name || '';
+      return;
+    }
+    if (name === state.me?.name) return;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'rename', name }));
+    }
+  }
+  els.name.addEventListener('change', commitName);
+  els.name.addEventListener('blur', commitName);
+  els.name.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') els.name.blur();
+  });
+
+  // Paste anywhere outside the textarea drops the text into the composer.
+  document.addEventListener('paste', (event) => {
+    if (event.target === els.text || event.target === els.name) return;
+    const text = event.clipboardData?.getData('text');
+    if (!text) return;
+    event.preventDefault();
+    els.text.value = els.text.value ? `${els.text.value}\n${text}` : text;
+    els.text.focus();
+  });
+
+  let dragDepth = 0;
+  const hasFiles = (event) => [...(event.dataTransfer?.types || [])].includes('Files');
+
+  window.addEventListener('dragenter', (event) => {
+    if (!hasFiles(event)) return;
+    dragDepth++;
+    document.body.classList.add('dragging');
+  });
+  window.addEventListener('dragover', (event) => {
+    if (hasFiles(event)) event.preventDefault();
+  });
+  window.addEventListener('dragleave', () => {
+    if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); }
+  });
+  window.addEventListener('drop', (event) => {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+    if (event.dataTransfer.files.length) sendFiles(event.dataTransfer.files);
+  });
+
+  renderPeers();
+  connect();
+})();
+</script>
+</body>
+</html>

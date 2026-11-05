@@ -1,0 +1,17 @@
+{
+  "name": "toss-it",
+  "version": "1.0.0",
+  "description": "Tiny self-hosted shared clipboard: discover other browsers on your network and toss them text or files.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

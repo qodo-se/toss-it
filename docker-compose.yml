@@ -1,0 +1,13 @@
+services:
+  toss-it:
+    build: .
+    image: toss-it
+    container_name: toss-it
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Largest single file that may be relayed.
+      MAX_FILE_MB: 512
+      # How long a relayed file stays downloadable before it is deleted.
+      FILE_TTL_MINUTES: 60
