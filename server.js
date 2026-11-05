@@ -9,9 +9,21 @@ import { WebSocketServer } from 'ws';
 
 // ---------------------------------------------------------------- config
 
-const PORT = Number(process.env.PORT || 3000);
-const MAX_FILE_MB = Number(process.env.MAX_FILE_MB || 512);
-const FILE_TTL_MINUTES = Number(process.env.FILE_TTL_MINUTES || 60);
+/** A positive number from the environment, or the default if it is missing or nonsense. */
+function numberFromEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    console.warn(`toss-it: ignoring invalid ${name}="${raw}", using ${fallback}`);
+    return fallback;
+  }
+  return value;
+}
+
+const PORT = numberFromEnv('PORT', 3000);
+const MAX_FILE_MB = numberFromEnv('MAX_FILE_MB', 512);
+const FILE_TTL_MINUTES = numberFromEnv('FILE_TTL_MINUTES', 60);
 const DATA_DIR = process.env.DATA_DIR || path.join(os.tmpdir(), 'toss-it');
 
 const MAX_FILE_BYTES = Math.round(MAX_FILE_MB * 1024 * 1024);
@@ -120,12 +132,16 @@ function serveStatic(urlPath, res) {
 
 const server = http.createServer((req, res) => {
   let urlPath;
+  let query;
   try {
-    urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    const url = new URL(req.url, 'http://localhost');
+    urlPath = decodeURIComponent(url.pathname);
+    query = url.searchParams;
   } catch {
     return endWith(res, 400, 'Bad request');
   }
-  const query = new URL(req.url, 'http://localhost').searchParams;
+  // A NUL byte would make every fs call throw, taking the process down with it.
+  if (urlPath.includes('\0')) return endWith(res, 400, 'Bad request');
 
   if (urlPath === '/healthz') return endWith(res, 200, 'ok');
   if (req.method === 'POST' && urlPath === '/upload') return handleUpload(req, res, query);
@@ -279,7 +295,12 @@ janitor.unref();
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
-  const { pathname } = new URL(req.url, 'http://localhost');
+  let pathname;
+  try {
+    ({ pathname } = new URL(req.url, 'http://localhost'));
+  } catch {
+    return socket.destroy();
+  }
   if (pathname !== '/ws') return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
