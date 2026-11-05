@@ -561,6 +561,26 @@
 
   // ------------------------------------------------------------- connection
 
+  /**
+   * The server names us from the User-Agent sent with the upgrade, which on
+   * Android is only ever the generic "Android". Chromium exposes the actual
+   * hardware model to the page, so swap it in when we have it.
+   */
+  async function refineDeviceName() {
+    if (!navigator.userAgentData?.getHighEntropyValues || !state.me) return;
+    let model = '';
+    try {
+      ({ model } = await navigator.userAgentData.getHighEntropyValues(['model']));
+    } catch {
+      return;
+    }
+    if (!model) return;
+    const better = state.me.name.replace(/^\S+/, model);
+    if (better !== state.me.name && ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'rename', name: better }));
+    }
+  }
+
   function connect() {
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${scheme}://${location.host}/ws`);
@@ -568,8 +588,6 @@
     ws.addEventListener('open', () => {
       attempts = 0;
       setStatus('online', 'Connected');
-      const saved = localStorage.getItem('tossit.name');
-      if (saved) ws.send(JSON.stringify({ type: 'rename', name: saved }));
     });
 
     ws.addEventListener('message', (event) => {
@@ -583,6 +601,7 @@
           state.peers = message.peers || [];
           if (document.activeElement !== els.name) els.name.value = state.me.name;
           renderPeers();
+          refineDeviceName();
           break;
         case 'peers':
           state.peers = message.peers || [];
@@ -590,7 +609,6 @@
           break;
         case 'renamed':
           if (state.me) state.me.name = message.name;
-          localStorage.setItem('tossit.name', message.name);
           if (document.activeElement !== els.name) els.name.value = message.name;
           break;
         case 'inbox':

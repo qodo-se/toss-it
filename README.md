@@ -15,7 +15,10 @@ No accounts, no pairing, no install, no app. One small container, one global roo
 ## What it does
 
 - **Discovery.** Every browser with the page open appears in everyone else's device list,
-  updating live as devices come and go.
+  updating live as devices come and go. Each one is named for what it is —
+  `Mac Chrome 3f9a`, `iPhone Safari b21c` — from the device, the browser, and a short
+  id off the connection, so two tabs of the same browser are still distinct. Nothing is
+  remembered between connections; you can rename a device inline for the session.
 - **Text.** Pick a device, paste or type, send. It lands in that device's inbox with a
   Copy button (which works over plain HTTP too, not just HTTPS).
 - **Files.** Pick a device, then choose files or drag them anywhere onto the page. The

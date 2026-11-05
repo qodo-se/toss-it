@@ -42,22 +42,34 @@ await fsp.mkdir(DATA_DIR, { recursive: true });
 /** @type {Map<string, {id: string, name: string, ws: import('ws').WebSocket}>} */
 const peers = new Map();
 
-const ADJECTIVES = [
-  'Amber', 'Brave', 'Calm', 'Clever', 'Copper', 'Crimson', 'Dusty', 'Eager',
-  'Fuzzy', 'Golden', 'Happy', 'Indigo', 'Jolly', 'Lucky', 'Mellow', 'Nimble',
-  'Olive', 'Proud', 'Purple', 'Quiet', 'Rapid', 'Silver', 'Sunny', 'Teal',
-  'Velvet', 'Witty', 'Zesty',
-];
+/**
+ * A per-connection label: what the device is, which browser, and a short id.
+ * Browsers do not expose the machine's hostname, so the User-Agent sent with
+ * the upgrade is the most we can know without asking the page.
+ */
+function deviceName(userAgent, id) {
+  const ua = String(userAgent || '');
 
-const ANIMALS = [
-  'Otter', 'Falcon', 'Badger', 'Panda', 'Heron', 'Lynx', 'Marmot', 'Narwhal',
-  'Ocelot', 'Puffin', 'Quokka', 'Raven', 'Stoat', 'Tapir', 'Urchin', 'Viper',
-  'Walrus', 'Yak', 'Zebra', 'Gecko', 'Ibex', 'Koala',
-];
+  const device =
+    /iPhone/i.test(ua) ? 'iPhone'
+    : /iPad/i.test(ua) ? 'iPad'
+    : /Android/i.test(ua) ? 'Android'
+    : /CrOS/i.test(ua) ? 'Chromebook'
+    : /Macintosh|Mac OS X/i.test(ua) ? 'Mac'
+    : /Windows/i.test(ua) ? 'Windows'
+    : /Linux|X11|BSD/i.test(ua) ? 'Linux'
+    : 'Device';
 
-function randomName() {
-  const pick = (list) => list[crypto.randomInt(list.length)];
-  return `${pick(ADJECTIVES)} ${pick(ANIMALS)}`;
+  // Order matters: Edge and Opera also claim Chrome, and Chrome also claims Safari.
+  const browser =
+    /\bEdg(iOS|A)?\//i.test(ua) ? 'Edge'
+    : /\bOPR\/|OPiOS|Opera/i.test(ua) ? 'Opera'
+    : /FxiOS|Firefox\//i.test(ua) ? 'Firefox'
+    : /CriOS|Chrome\//i.test(ua) ? 'Chrome'
+    : /Safari\//i.test(ua) ? 'Safari'
+    : '';
+
+  return [device, browser, id.slice(0, 4)].filter(Boolean).join(' ');
 }
 
 function cleanName(value) {
@@ -343,8 +355,9 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
 });
 
-wss.on('connection', (ws) => {
-  const peer = { id: crypto.randomUUID(), name: randomName(), ws };
+wss.on('connection', (ws, req) => {
+  const id = crypto.randomUUID();
+  const peer = { id, name: deviceName(req.headers['user-agent'], id), ws };
   peers.set(peer.id, peer);
   ws.isAlive = true;
 
